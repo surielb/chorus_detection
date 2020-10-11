@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 
 def quantify(matrix, depth = 8):
     image = matrix.copy()
@@ -44,7 +43,7 @@ def getThres(gray, depth = 8):
             bestTh = th
     return bestTh
 
-def binarize(img, threshold, isplot = 0):
+def binarize(img, threshold):
     new_img = img.copy()
     for i in range(0, len(img)):
         for j in range(0, len(img[i, :])):
@@ -53,8 +52,6 @@ def binarize(img, threshold, isplot = 0):
             else:
                 new_img[i, j] = 1
 
-    if isplot == 1:
-        plt.matshow(new_img, cmap = plt.cm.gray)
-        plt.show()
+    
 
     return new_img

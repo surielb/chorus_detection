@@ -3,10 +3,10 @@ import essentia
 import essentia.standard
 from essentia.standard import *
 import numpy as np
-import matplotlib.pyplot as plt
 import scipy.signal
 import otsu
-
+import argparse
+import json
 def read_audio(filename, sample_rate = 44100):
     """read audio file into a list"""
     loader = essentia.standard.MonoLoader(filename = filename, sampleRate = sample_rate)
@@ -17,7 +17,8 @@ def extract_beat(audio, sample_rate = 44100):
     """extract beats from audio signal list"""
     beat_tracker = BeatTrackerDegara()
     beats_time = beat_tracker(audio)
-    beats = np.array(map(lambda time : round(time * sample_rate), beats_time))
+    _bb =list(map(lambda time : round(time * sample_rate), beats_time))
+    beats = np.array(_bb)
     beats = np.append(0, beats)
     beats_time = np.append(0, beats_time)
 
@@ -106,7 +107,7 @@ def enhance_sdm(sdm):
 
     return enhanced_mat
 
-def detect_repetition(sdm, diagonal_num = 30, thres_rate = 0.2, min_sdm_window_size = 48, is_local = True, is_plot = False):
+def detect_repetition(sdm, diagonal_num = 30, thres_rate = 0.2, min_sdm_window_size = 48, is_local = True):
     """detect repetition, calculate and return the binarized matrix and indeces of candidate diagonals"""
 
     length = len(sdm)
@@ -121,13 +122,7 @@ def detect_repetition(sdm, diagonal_num = 30, thres_rate = 0.2, min_sdm_window_s
     B = np.array([1, 0, -1])
     dig_smooth_diiiferentia = scipy.signal.lfilter(B, 1 ,dig)
 
-    if is_plot:
-        plt.plot(dig_mean, label = 'mean of diagonals')
-        plt.plot(dig, label = 'mean of diagonals without linear offset')
-        plt.plot(dig_lp, label = 'smoothed mean of diagonals')
-        plt.plot(dig_smooth_diiiferentia, label = 'derivative of mean of diagonals')
-        plt.title('mean of diagonals')
-        plt.legend()
+    
 
 
     # index where the smoothed differential of diagonals from negative to positive
@@ -148,10 +143,10 @@ def detect_repetition(sdm, diagonal_num = 30, thres_rate = 0.2, min_sdm_window_s
 
     while True:
         threshold_otsu += 1
-        del_indeces = np.array([])
+        del_indeces = []
         for i in range(len(minima)):
             if minima[i] > threshold_otsu:
-                del_indeces = np.append(del_indeces, i)
+                del_indeces.append(i)
 
         if len(minima_indeces) - len(del_indeces) > 50 or len(del_indeces) == 0:
             break
@@ -321,8 +316,7 @@ def locate_interesting_segment(binary_matrix, indeces, beats, during_threshold =
                 new_binary_matrix[row, row - row_begin + col_begin] = 0
 
     segments = np.delete(segments, del_indeces, axis = 0)
-    # plt.matshow(new_binary_matrix, cmap=plt.cm.gray)
-    # plt.show()
+  
 
     return segments, new_binary_matrix
 
@@ -611,7 +605,7 @@ def filter_1d(x, sdm, time_len = 48):
 
     return rate
 
-def chorus_detection(filename, min_sdm_window_size = 48, is_local = True, is_plot = False):
+def chorus_detection(filename, min_sdm_window_size = 48, is_local = True):
     # extract audio feature "/Users/xueweiyao/Downloads/musics/刘欢 - 得民心者得天下.mp3"
     audio = read_audio(filename)
     beats, beats_time = extract_beat(audio)
@@ -637,37 +631,28 @@ def chorus_detection(filename, min_sdm_window_size = 48, is_local = True, is_plo
 
     chorus = find_location_of_chorus(best, sdm_new, beats_time)
 
-    if is_plot:
-        fig = plt.figure()
-        ax = fig.add_subplot(211)
-        ax.imshow(mfcc.T, cmap=plt.cm.gray)
-        ax.set_title('mfcc feature matrix')
-        ax.set_aspect(5)
-
-        ax = fig.add_subplot(212)
-        ax.imshow(chroma.T, cmap=plt.cm.gray)
-        ax.set_title('chroma feature matrix')
-        ax.set_aspect(5)
-
-        # plt.matshow(mfcc.T, cmap=plt.cm.gray)
-        # plt.title('mfcc feature matrix')
-        #
-        # plt.matshow(chroma.T, cmap = plt.cm.gray)
-        # plt.title('chroma feature matrix')
-        plt.matshow(sdm_chroma, cmap = plt.cm.gray)
-        plt.title('self-similarity matrix obtained from chroma')
-        plt.matshow(sdm_mfcc, cmap = plt.cm.gray)
-        plt.title('self-similarity matrix obtained from MFCC')
-        plt.matshow(enhanced_mat, cmap = plt.cm.gray)
-        plt.title('enhanced self-similarity matrix obtained from chroma')
-        plt.matshow(sdm_new, cmap = plt.cm.gray)
-        plt.title('the new self-similarity matrix')
-        plt.matshow(bimar, cmap = plt.cm.gray)
-        plt.title('the binarized matrix')
-
-        plt.show()
-
+    
+    #list(map(lambda arr:{start:arr[0],end:arr[1]},chorus))
     return chorus
 
 if __name__ == '__main__':
-    chorus_detection('/Users/xueweiyao/Downloads/musics/李克勤 - 月半小夜曲.wav', True)
+    parser = argparse.ArgumentParser(
+        description="Select and output the chorus of a piece of music")
+    parser.add_argument("input_file", help="Path to input audio file")
+    parser.add_argument(
+        "--output_file",
+        default="chorus.json",
+        help="Output file")
+    parser.add_argument(
+        "--min_sdm",
+        default=48,
+        help="Minimum sdm window size")
+        
+    args = parser.parse_args()
+    chorus = chorus_detection(args.input_file,min_sdm_window_size=args.min_sdm,is_local= False)
+    segments = list(map(lambda arr:({"start":arr[0],"end":arr[1]}),chorus))
+    res={"input":args.input_file,"segments":segments}
+    print(json.dumps(res))
+    if args.output_file is not None:
+        with open(args.output_file, 'w') as json_file:
+            json.dump(res, json_file)
